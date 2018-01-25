@@ -1,0 +1,71 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+}
+
+
+
+.screen {
+	height: 600px;
+	width: 300px;
+
+	border-style: solid;
+	border-width: thick;
+	border-color: gray;
+	background-color: black;
+}
+
+.in-game {
+	font-size: 0;
+}
+
+.tile {
+	height: 30px;
+	width: 30px;
+	display: inline-block;
+
+	box-sizing: border-box;
+	background-color: transparent;
+}
+
+.tile.piece-i {
+	background: linear-gradient(to bottom right, red, maroon);
+}
+
+.tile.piece-t {
+	background: linear-gradient(to bottom right, cyan, royalblue);
+}
+
+.tile.piece-l {
+	background: linear-gradient(to bottom right, darkorange, orangered);
+}
+
+.tile.piece-j {
+	background: linear-gradient(to bottom right, blue, darkblue);
+}
+
+.tile.piece-s {
+	background: linear-gradient(to bottom right, magenta, indigo);
+}
+
+.tile.piece-z {
+	background: linear-gradient(to bottom right, greenyellow, green);
+}
+
+.tile.piece-o {
+	background: linear-gradient(to bottom right, yellow, orange);
+}
+
+
+
+.text-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+
+    color: white;
+    font-family: "Lucida Console", Monaco, monospace;
+    font-size: 30px;
+}
