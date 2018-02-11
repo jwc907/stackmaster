@@ -1,18 +1,45 @@
 body {
-  margin: 0;
-  padding: 0;
-  font-family: sans-serif;
+	margin: 0;
+	padding: 0;
+	font-family: sans-serif;
 }
 
+.piecePreview {
+	height: 60px;
+	width: 360px;
 
+	display: flex;
+	background-color: black;
+}
+
+.piecePreviewText {
+	color: red;
+	font-family: "Lucida Console", Monaco, monospace;
+	font-size: 20px;
+
+	height: 60px;
+	width: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nextPiece {
+	height: 60px;
+	width: 120px;
+
+	margin-top: auto;
+	font-size: 0;
+}
 
 .screen {
 	height: 600px;
 	width: 300px;
 
 	border-style: solid;
-	border-width: thick;
-	border-color: gray;
+	border-width: 30px;
+ 	border-image: linear-gradient(to bottom right, silver, dimgray);
+ 	border-image-slice: 1;
 	background-color: black;
 }
 
@@ -57,15 +84,13 @@ body {
 	background: linear-gradient(to bottom right, yellow, orange);
 }
 
-
-
 .text-display {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
 
-    color: white;
-    font-family: "Lucida Console", Monaco, monospace;
-    font-size: 30px;
+	color: white;
+	font-family: "Lucida Console", Monaco, monospace;
+	font-size: 30px;
 }

@@ -547,6 +547,7 @@ registerServiceWorker();
 		enter(state) {
 			let newState = clone(state);
 			newState.cursorState = 0;
+			newState.nextPiece = null;
 			return newState;
 		}
 
@@ -619,8 +620,8 @@ registerServiceWorker();
 			newState.lockDelay = Constants.LockDelay();
 			newState.lineClearDelay = Constants.LineClearDelay();
 			newState.DASThreshold = Constants.DASThreshold();
-			//newState.getNextPiece = Constants.PieceGenerator();
-			newState.getNextPiece = Constants.DebugPieceGenerator();
+			newState.getNextPiece = Constants.PieceGenerator();
+			//newState.getNextPiece = Constants.DebugPieceGenerator();
 
 			// init starting piece. logic always derives currentPiece from nextPiece
 			newState.nextPiece = newState.getNextPiece(newState.level);
@@ -1254,6 +1255,8 @@ registerServiceWorker();
 
 		 	this.processFrame = this.processFrame.bind(this);
 		 	this.updateComponentState = this.updateComponentState.bind(this);
+
+		 	this.piecePreview = document.getElementById("nextPiece");
 		}
 
 		/*
@@ -1385,12 +1388,48 @@ registerServiceWorker();
 		}
 
 		render () {
+			// render the piece preview, if a next piece exists
+			ReactDOM.render(<PiecePreview nextPiece={this.state.nextPiece} />,
+							this.piecePreview);
+
+			// render the game screen
 			let currentScreen = this.state.currentScreen;
 
 			return this.renderMap[currentScreen]();
 		}
 	}
 
+	function PiecePreview(props) {
+		let nextPiece = props.nextPiece;
+		if (nextPiece != null) {
+
+			// create a 2x10 well
+			let well = new Array(2);
+			for (let i = 0; i < 2; i++) {
+				well[i] = new Array(10);
+				well[i].fill(null);
+			}
+
+			let p = generateNewPiece(nextPiece);
+			// make nextPiece start inside the preview "well"
+			p.row = p.row - 18;
+			mergePiece(well, p);
+
+			// crop the well to center 2x4 tiles
+			for (let i = 0; i < 2; i++) {
+				well[i] = well[i].slice(3,7);
+			}
+
+			let wellRows = [];
+			for (let i = 1; i >= 0; i--) {
+				wellRows.push(<WellRow key={i} row={well[i]} />);
+			}
+
+			return (<div>{wellRows}</div>);
+		}
+
+		return null;
+	}
 
 	function ListItem(props) {
 		return (
@@ -1404,13 +1443,15 @@ registerServiceWorker();
 		let currentPiece = props.currentPiece;
 
 		if (currentPiece != null) {
-			mergeCurrentPiece(well, currentPiece);
+			mergePiece(well, currentPiece);
 		}
 
 		let wellRows = [];
 		for (let i = 19; i >= 0; i--) {
 			wellRows.push(<WellRow key={i} row={well[i]} />);
 		}
+
+
 
 		return (<div className='screen in-game'>
 			{wellRows}
@@ -1475,7 +1516,7 @@ registerServiceWorker();
 		Helper function to fill well with the current piece's tiles.
 		Modifies the well in-place.
 	*/
-	function mergeCurrentPiece(well, currentPiece) {
+	function mergePiece(well, currentPiece) {
 		let tiles = Constants.PieceRotation[currentPiece.id][currentPiece.rotation];
 		for (let i = 0; i < tiles.length; i++) {
 			let row = currentPiece.row + tiles[i][0];
