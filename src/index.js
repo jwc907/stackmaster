@@ -406,8 +406,8 @@ registerServiceWorker();
 			update gravity and return the number of rows to fall through.
 	    */
 	    updateGravity() {
-	    	this._currentGravity = this._gravity(this._level);
-	    	let g = Math.floor(this._currentGravity / 256);
+			this._currentGravity += this._gravity(this._level);
+			let g = Math.floor(this._currentGravity / 256);
 	    	this._currentGravity %= 256;
 
 	    	return g;
@@ -446,6 +446,7 @@ registerServiceWorker();
 	    		this._linesToClear = linesToClear;
 			}
 			this._lockedPiece = p;
+			this._currentGravity = 0; // reset fractional gravity
 	    	this._currentPiece = null;
 	    }
 
@@ -726,10 +727,10 @@ registerServiceWorker();
 			}
 
 			// gravity
-/*
 			let g = newState.updateGravity();
-			newP.row += applyGravity(newP, newState.well, g)
-*/
+			let offsetG = applyGravity(newP, newState.well, g);
+			newP.row += offsetG;
+
 			newState.currentLockDelay = newState.lockDelay(newState.level);
 			newState.currentPiece = newP;
 			newState.nextScreen = "pieceLive";
@@ -794,13 +795,11 @@ registerServiceWorker();
 			}
 
 			// gravity
-			/*
 			let g = newState.updateGravity();
 			let offsetG = applyGravity(p, newState.well, g);
 			p.row += offsetG;
 			if (offsetG !== 0)
 				movedDown = true;
-			*/
 
 			// lock delay
 			if (movedDown) {
