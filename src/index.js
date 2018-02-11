@@ -175,7 +175,7 @@ registerServiceWorker();
 		}
 	};
 
-	Constants.EntryDelay = function(n = 14) {
+	Constants.EntryDelay = function(n = 30) {
 		return function(level) {
 			return n;
 		}
@@ -303,7 +303,7 @@ registerServiceWorker();
 
 	class GameState {
 		constructor() {
-			this._level = null;
+			this._level = 0;
 			// well is 21 high and 10 wide
 			// need to be careful to DEEP COPY nested arrays!
 			this._well = new Array(21);
@@ -323,19 +323,23 @@ registerServiceWorker();
 			this._currentPiece = null; // Piece OBJECT
 			this._nextPiece = null; // PieceId
 
+			this._onFirstPiece = null;
 			this._currentGravity = null; // n % 256
 			this._currentLockDelay = null;
-			this._chargeLeft = null;
-			this._chargeRight = null;
-			this._chargeA = null;
-			this._chargeB = null;
-			this._chargeC = null;
+			this._chargeLeft = 0;
+			this._chargeRight = 0;
+			this._chargeUp = 0;
+			this._chargeDown = 0;
+			this._chargeA = 0;
+			this._chargeB = 0;
+			this._chargeC = 0;
 			this._linesToClear = null;
 
 			this._currentScreen = "start";
 			this._nextScreen = "start";
 			this._screenDuration = null;
 			this._cursorState = 0;
+			this._gameOver = false;
 		}
 
 		get level() { return this._level; }
@@ -361,6 +365,8 @@ registerServiceWorker();
 		get nextPiece() { return this._nextPiece; }
 	    set nextPiece(nextPiece) { this._nextPiece = nextPiece; }
 
+	    get onFirstPiece() { return this._onFirstPiece; }
+	    set onFirstPiece(onFirstPiece) { this._onFirstPiece = onFirstPiece; }
 		get currentGravity() { return this._currentGravity; }
 	    set currentGravity(currentGravity) { this._currentGravity = currentGravity; }
 	    get currentLockDelay() { return this._currentLockDelay; }
@@ -369,6 +375,10 @@ registerServiceWorker();
 	    set chargeLeft(chargeLeft) { this._chargeLeft = chargeLeft; }
 		get chargeRight() { return this._chargeRight; }
 	    set chargeRight(chargeRight) { this._chargeRight = chargeRight; }
+	    get chargeUp() { return this._chargeUp; }
+	    set chargeUp(chargeUp) { this._chargeUp = chargeUp; }
+		get chargeDown() { return this._chargeDown; }
+	    set chargeDown(chargeDown) { this._chargeDown = chargeDown; }
 		get chargeA() { return this._chargeA; }
 	    set chargeA(chargeA) { this._chargeA = chargeA; }
 		get chargeB() { return this._chargeB; }
@@ -386,6 +396,8 @@ registerServiceWorker();
 	    set screenDuration(screenDuration) { this._screenDuration = screenDuration; }
 		get cursorState() { return this._cursorState; }
 	    set cursorState(cursorState) { this._cursorState = cursorState; }
+	    get gameOver() { return this._gameOver; }
+	    set gameOver(gameOver) { this._gameOver = gameOver; }
 
 	    /*
 			update gravity and return the number of rows to fall through.
@@ -467,17 +479,28 @@ registerServiceWorker();
 		/*
 			updates the current level on piece lock or line clear.
 			if level = x99, need line clear to advance
+
+			if the level goes above 999 on line clear, the game is over
 		*/
 		updateLevel(linesCleared) {
-			let level = this._level;
+			// don't increment level when the very first piece spawns!
+			if (this._onFirstPiece) {
+				this._onFirstPiece = false;
+			} else {
+				let level = this._level;
 
-			if (linesCleared > 0) {
-				level += linesCleared;
-			} else if (level % 100 !== 99) {
-				level++;
+				if (linesCleared > 0) {
+					level += linesCleared;
+					if (level > 999) {
+						level = 999;
+						this._gameOver = true;
+					}
+				} else if (level % 100 !== 99) {
+					level++;
+				}
+
+				this._level = level;
 			}
-			
-			this._level = level;
 		}
 
 	}
@@ -553,8 +576,11 @@ registerServiceWorker();
 
 		process(state, inputs) {
 			let newState = clone(state);
+			processInputs(newState, inputs);
 
-			if (inputs.A || inputs.B || inputs.C) {
+			if (newState.chargeA === 1 ||
+				newState.chargeB === 1 ||
+				newState.chargeC === 1) {
 				newState.nextScreen = "levelSelect";
 			}
 
@@ -576,16 +602,19 @@ registerServiceWorker();
 
 		process(state, inputs) {
 			let newState = clone(state);
+			processInputs(newState, inputs);
 			let len = this.levelOptions.length;
 
-			if (inputs.down) {
+			if (newState.chargeDown === 1) {
 				newState.cursorState = (newState.cursorState + 1) % len;
 			}
-			if (inputs.up) {
+			if (newState.chargeUp === 1) {
 				newState.cursorState = (newState.cursorState - 1 + len) % len;
 			}
 
-			if (inputs.A || inputs.B || inputs.C) {
+			if (newState.chargeA === 1 ||
+				newState.chargeB === 1 ||
+				newState.chargeC === 1) {
 				newState.level = this.levelOptions[newState.cursorState];
 				newState.nextScreen = "gameStart";
 			}
@@ -627,6 +656,7 @@ registerServiceWorker();
 			newState.nextPiece = newState.getNextPiece(newState.level);
 
 			// init other game state values
+			newState.onFirstPiece = true;
 			newState.currentGravity = newState.gravity(newState.level);
 			newState.currentLockDelay = 0;
 			newState.chargeLeft = 0;
@@ -635,6 +665,7 @@ registerServiceWorker();
 			newState.chargeB = 0;
 			newState.chargeC = 0;
 			newState.linesToClear = null;
+			newState.gameOver = false;
 
 			newState.screenDuration = this.duration;
 
@@ -691,9 +722,10 @@ registerServiceWorker();
 			}
 
 			// gravity
+/*
 			let g = newState.updateGravity();
 			newP.row += applyGravity(newP, newState.well, g)
-
+*/
 			newState.currentLockDelay = newState.lockDelay(newState.level);
 			newState.currentPiece = newP;
 			newState.nextScreen = "pieceLive";
@@ -818,7 +850,11 @@ registerServiceWorker();
 
 			newState.screenDuration--;
 			if (newState.screenDuration === 0) {
-				newState.nextScreen = "pieceSpawn";
+				if (newState.gameOver) { // when lvl 999+ is reached
+					newState.nextScreen = "gameOver";
+				} else {
+					newState.nextScreen = "pieceSpawn";
+				}
 			}
 			return newState;
 		}
@@ -891,6 +927,16 @@ registerServiceWorker();
 			state.chargeRight += 1;
 		else
 			state.chargeRight = 0;
+
+		if (inputs.up)
+			state.chargeUp += 1;
+		else
+			state.chargeUp = 0;
+
+		if (inputs.down)
+			state.chargeDown += 1;
+		else
+			state.chargeDown = 0;
 
 		// left + right resets DAS charge.
 		if (inputs.left && inputs.right) {
@@ -1257,6 +1303,7 @@ registerServiceWorker();
 		 	this.updateComponentState = this.updateComponentState.bind(this);
 
 		 	this.piecePreview = document.getElementById("nextPiece");
+			this.levelDisplay = document.getElementById("levelDisplay");
 		}
 
 		/*
@@ -1303,7 +1350,7 @@ registerServiceWorker();
 
 		renderStartScreen() {
 			return <div className='screen text-display'>
-				Press any key to start
+				Press any rotate key to start
 			</div>
 		}
 
@@ -1391,6 +1438,10 @@ registerServiceWorker();
 			ReactDOM.render(<PiecePreview nextPiece={this.state.nextPiece} />,
 							this.piecePreview);
 
+			// render the level display
+			ReactDOM.render(<LevelDisplay level={this.state.level} />,
+							this.levelDisplay);
+
 			// render the game screen
 			let currentScreen = this.state.currentScreen;
 
@@ -1428,6 +1479,34 @@ registerServiceWorker();
 		}
 
 		return null;
+	}
+
+	function LevelDisplay(props) {
+		let level = props.level;
+		let currentLevel = levelToString(level);
+		let targetLevel = getTargetLevel(level);
+
+		return (<div className='levelDisplayText'>
+			LEVEL: {currentLevel} / {targetLevel}
+		</div>);
+	}
+
+	function levelToString(level) {
+		if (level < 10) {
+			return "00" + (level).toString();
+		} else if (level < 100) {
+			return "0" + (level).toString();
+		}
+		return (level).toString();
+	}
+
+	function getTargetLevel(level) {
+		let hundredthPlace = Math.floor(level / 100);
+		if (hundredthPlace === 9) {
+			return "999";
+		} else {
+			return ((hundredthPlace + 1) * 100).toString();
+		}
 	}
 
 	function ListItem(props) {

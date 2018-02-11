@@ -4,7 +4,7 @@ body {
 	font-family: sans-serif;
 }
 
-.piecePreview {
+.piecePreview, .levelDisplay {
 	height: 60px;
 	width: 360px;
 
@@ -30,6 +30,17 @@ body {
 
 	margin-top: auto;
 	font-size: 0;
+}
+
+.levelDisplayText {
+	color: red;
+	font-family: "Lucida Console", Monaco, monospace;
+	font-size: 20px;
+
+	width: 360px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .screen {
