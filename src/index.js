@@ -1341,7 +1341,7 @@ registerServiceWorker();
 						well={this.state.well}
 						level={this.state.level}
 						currentPiece={this.state.currentPiece}
-						nextPiece={this.state.nextPiece}
+						linesToClear={this.state.linesToClear}
 					/>;
 		}
 
@@ -1350,7 +1350,7 @@ registerServiceWorker();
 						well={this.state.well}
 						level={this.state.level}
 						currentPiece={this.state.currentPiece}
-						nextPiece={this.state.nextPiece}
+						linesToClear={this.state.linesToClear}
 					/>;
 		}
 
@@ -1359,7 +1359,7 @@ registerServiceWorker();
 						well={this.state.well}
 						level={this.state.level}
 						currentPiece={this.state.currentPiece}
-						nextPiece={this.state.nextPiece}
+						linesToClear={this.state.linesToClear}
 					/>;
 		}
 
@@ -1368,7 +1368,6 @@ registerServiceWorker();
 						well={this.state.well}
 						level={this.state.level}
 						currentPiece={this.state.currentPiece}
-						nextPiece={this.state.nextPiece}
 						linesToClear={this.state.linesToClear}
 					/>;
 		}
@@ -1446,9 +1445,11 @@ registerServiceWorker();
 			mergePiece(well, currentPiece);
 		}
 
+		let linesToClear = props.linesToClear === null ? [] : props.linesToClear;
 		let wellRows = [];
 		for (let i = 19; i >= 0; i--) {
-			wellRows.push(<WellRow key={i} row={well[i]} />);
+			let cleared = linesToClear.includes(i);
+			wellRows.push(<WellRow key={i} row={well[i]} cleared={cleared}/>);
 		}
 
 
@@ -1460,9 +1461,10 @@ registerServiceWorker();
 
 	function WellRow(props) {
 		let row = props.row;
+		let cleared = props.cleared;
 
 		let tiles = row.map((tile, i) => 
-			<WellTile key={i} tile={tile} />
+			<WellTile key={i} tile={tile} cleared={cleared} />
 		);
 
 		return (
@@ -1471,7 +1473,12 @@ registerServiceWorker();
 	}
 
 	function WellTile(props) {
-		let css = getTileCss(props.tile);
+		let css;
+		if (props.cleared) {
+			css = "tile piece-cleared";
+		} else {
+			css = getTileCss(props.tile);
+		}
 
 		return (
 			<div className={css}></div>
