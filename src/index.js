@@ -322,6 +322,7 @@ registerServiceWorker();
 
 			this._currentPiece = null; // Piece OBJECT
 			this._nextPiece = null; // PieceId
+			this._lockedPiece = null;
 
 			this._onFirstPiece = null;
 			this._currentGravity = null; // n % 256
@@ -364,6 +365,8 @@ registerServiceWorker();
 	    set currentPiece(currentPiece) { this._currentPiece = currentPiece; }
 		get nextPiece() { return this._nextPiece; }
 	    set nextPiece(nextPiece) { this._nextPiece = nextPiece; }
+	    get lockedPiece() {return this._lockedPiece; }
+	    set lockedPiece(lockedPiece) { this._lockedPiece = lockedPiece; }
 
 	    get onFirstPiece() { return this._onFirstPiece; }
 	    set onFirstPiece(onFirstPiece) { this._onFirstPiece = onFirstPiece; }
@@ -439,9 +442,10 @@ registerServiceWorker();
 	    		}
 	    	}
 
-	    	if (linesToClear.length > 0)
+			if (linesToClear.length > 0) {
 	    		this._linesToClear = linesToClear;
-
+			}
+			this._lockedPiece = p;
 	    	this._currentPiece = null;
 	    }
 
@@ -764,7 +768,7 @@ registerServiceWorker();
 			processInputs(newState, inputs);
 
 			let movedDown = false;
-			let lockedPiece = false;
+			let pieceIsLocked = false;
 
 			// rotation
 			let p = clone(newState.currentPiece);
@@ -786,7 +790,7 @@ registerServiceWorker();
 				}
 			} else if (offsetRow !== 0) { // attempted to move down when unable to do so
 				//console.log("locked piece! " + offsetRow + ", " + offsetCol);
-				lockedPiece = true;
+				pieceIsLocked = true;
 			}
 
 			// gravity
@@ -804,11 +808,11 @@ registerServiceWorker();
 			} else if (pieceBottomContact(p, newState.well)) {
 				newState.currentLockDelay -= 1;
 				if (newState.currentLockDelay === 0)
-					lockedPiece = true;
+					pieceIsLocked = true;
 			}
 
 			// update well on piece lock and transition to appropriate screen state
-			if (lockedPiece) {
+			if (pieceIsLocked) {
 				newState.lockPiece(p);
 
 				if (newState.linesToClear != null)
@@ -826,15 +830,10 @@ registerServiceWorker();
 		}
 	}
 
-
-
-
-
-
-
 	class EntryDelayScreen extends Screen {
-		constructor(duration = 30) {
+		constructor(duration = 30, flashDuration = 3) {
 			super(duration);
+			this._flashDuration = flashDuration;
 		}
 
 		enter(state) {
@@ -849,6 +848,11 @@ registerServiceWorker();
 			processInputs(newState, inputs);
 
 			newState.screenDuration--;
+
+			let initialDuration = newState.entryDelay(newState.level);
+			if (newState.screenDuration === (initialDuration - this._flashDuration)) {
+				newState.lockedPiece = null;
+			}
 			if (newState.screenDuration === 0) {
 				if (newState.gameOver) { // when lvl 999+ is reached
 					newState.nextScreen = "gameOver";
@@ -868,6 +872,7 @@ registerServiceWorker();
 		enter(state) {
 			let newState = clone(state);
 			newState.screenDuration = newState.lineClearDelay(newState.level);
+			newState.lockedPiece = null;
 			return newState;
 		}
 
@@ -909,11 +914,11 @@ registerServiceWorker();
 
 
 
-	/**
+	/*
 		AUXILIARY FUNCTIONS
 	*/
 
-	/**
+	/*
 		track how long directions/buttons are held down
 		for determining DAS/IRS
 	*/
@@ -960,7 +965,7 @@ registerServiceWorker();
 			state.chargeC = 0;
 	}
 
-	/**
+	/*
 		initializes a new Piece, given a PieceId
 	*/
 	function generateNewPiece(id) {
@@ -969,8 +974,7 @@ registerServiceWorker();
 		return p;
 	}
 
-
-	/**
+	/*
 		determine whether to apply IRS.
 		CCW rotation takes precedence over CW rotation
 
@@ -984,8 +988,7 @@ registerServiceWorker();
 		return 0;
 	}
 
-
-	/**
+	/*
 		checks whether a piece is OOB or collides with something inside the well
 
 		returns true if there is a collision
@@ -1012,8 +1015,7 @@ registerServiceWorker();
 		return false;
 	}
 
-
-	/**
+	/*
 		determine which way to rotate a live piece, given inputs.
 
 		should only attempt rotation on initial button press.
@@ -1032,7 +1034,7 @@ registerServiceWorker();
 		return 0;
 	}
 
-	/**
+	/*
 		try to rotate a piece.
 
 		rotation logic:
@@ -1071,7 +1073,11 @@ registerServiceWorker();
 		return newP;
 	}
 
+	/*
+		see tryRotation() for wallkick rules.
 
+		returns a boolean depending on whether the given piece can wallkick.
+	*/
 	function canWallkick(p, well) {
 		if (p.id === "I") return false;
 
@@ -1098,7 +1104,7 @@ registerServiceWorker();
 		return true;
 	}
 
-	/**
+	/*
 		determine which direction a piece should move.
 
 		horizontal input takes precedence over vertical input
@@ -1123,9 +1129,7 @@ registerServiceWorker();
 		return [0,0];
 	}
 
-
-
-	/**
+	/*
 		determine if the given piece movement is legal.
 
 		returns true if legal movement, false otherwise.
@@ -1142,9 +1146,7 @@ registerServiceWorker();
 			return false;
 	}
 
-
-
-	/**
+	/*
 		apply gravity (the number of rows to fall through) on the given piece.
 		consider using a more efficient algorithm!
 
@@ -1166,8 +1168,7 @@ registerServiceWorker();
 		return result;
 	}
 
-
-	/**
+	/*
 		returns true if the bottom of the live piece
 		is touching the well bottom or another piece.
 	*/
@@ -1176,16 +1177,6 @@ registerServiceWorker();
 		newP.row -= 1;
 		return collision(newP, well);
 	}
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1240,7 +1231,6 @@ registerServiceWorker();
 	document.addEventListener('keydown', handleKeydown, true);
 	document.addEventListener('keyup', handleKeyup, true);
 
-
 	/*
 		screen state diagram:
 		0 - start -> 1
@@ -1285,7 +1275,8 @@ registerServiceWorker();
 		 		level: this.gameState.level,
 		 		currentPiece: this.gameState.currentPiece,
 		 		nextPiece: this.gameState.nextPiece,
-		 		linesToClear: this.gameState.linesToClear
+		 		linesToClear: this.gameState.linesToClear,
+		 		lockedPiece: this.gameState.lockedPiece
 		 	}
 
 		 	this.renderMap = {
@@ -1342,7 +1333,8 @@ registerServiceWorker();
 		 		level: gameState.level,
 		 		currentPiece: gameState.currentPiece,
 		 		nextPiece: gameState.nextPiece,
-		 		linesToClear: gameState.linesToClear
+		 		linesToClear: gameState.linesToClear,
+		 		lockedPiece: gameState.lockedPiece
 			})
 
 		}
@@ -1389,6 +1381,7 @@ registerServiceWorker();
 						level={this.state.level}
 						currentPiece={this.state.currentPiece}
 						linesToClear={this.state.linesToClear}
+						lockedPiece={this.state.lockedPiece}
 					/>;
 		}
 
@@ -1398,6 +1391,7 @@ registerServiceWorker();
 						level={this.state.level}
 						currentPiece={this.state.currentPiece}
 						linesToClear={this.state.linesToClear}
+						lockedPiece={this.state.lockedPiece}
 					/>;
 		}
 
@@ -1407,6 +1401,7 @@ registerServiceWorker();
 						level={this.state.level}
 						currentPiece={this.state.currentPiece}
 						linesToClear={this.state.linesToClear}
+						lockedPiece={this.state.lockedPiece}
 					/>;
 		}
 
@@ -1416,6 +1411,7 @@ registerServiceWorker();
 						level={this.state.level}
 						currentPiece={this.state.currentPiece}
 						linesToClear={this.state.linesToClear}
+						lockedPiece={this.state.lockedPiece}
 					/>;
 		}
 
@@ -1519,19 +1515,21 @@ registerServiceWorker();
 	function WellScreen(props) {
 		let well = copyWell(props.well);
 		let currentPiece = props.currentPiece;
+		let lockedPiece = props.lockedPiece;
 
 		if (currentPiece != null) {
 			mergePiece(well, currentPiece);
+		}
+		if (lockedPiece != null) {
+			mergePiece(well, lockedPiece, "CL");
 		}
 
 		let linesToClear = props.linesToClear === null ? [] : props.linesToClear;
 		let wellRows = [];
 		for (let i = 19; i >= 0; i--) {
 			let cleared = linesToClear.includes(i);
-			wellRows.push(<WellRow key={i} row={well[i]} cleared={cleared}/>);
+			wellRows.push(<WellRow key={i} row={well[i]} cleared={cleared} />);
 		}
-
-
 
 		return (<div className='screen in-game'>
 			{wellRows}
@@ -1543,7 +1541,7 @@ registerServiceWorker();
 		let cleared = props.cleared;
 
 		let tiles = row.map((tile, i) => 
-			<WellTile key={i} tile={tile} cleared={cleared} />
+			<WellTile key={i} tile={cleared ? "CL" : tile} />
 		);
 
 		return (
@@ -1552,12 +1550,7 @@ registerServiceWorker();
 	}
 
 	function WellTile(props) {
-		let css;
-		if (props.cleared) {
-			css = "tile piece-cleared";
-		} else {
-			css = getTileCss(props.tile);
-		}
+		let css = getTileCss(props.tile);
 
 		return (
 			<div className={css}></div>
@@ -1578,6 +1571,8 @@ registerServiceWorker();
 
 	function getTileCss(tile) {
 		switch (tile) {
+			case "CL":
+				return "tile piece-cleared";
 			case "I":
 				return "tile piece-i";
 			case "T":
@@ -1602,13 +1597,17 @@ registerServiceWorker();
 		Helper function to fill well with the current piece's tiles.
 		Modifies the well in-place.
 	*/
-	function mergePiece(well, currentPiece) {
-		let tiles = Constants.PieceRotation[currentPiece.id][currentPiece.rotation];
+	function mergePiece(well, p, newId) {
+		let tiles = Constants.PieceRotation[p.id][p.rotation];
 		for (let i = 0; i < tiles.length; i++) {
-			let row = currentPiece.row + tiles[i][0];
-			let col = currentPiece.col + tiles[i][1];
+			let row = p.row + tiles[i][0];
+			let col = p.col + tiles[i][1];
 
-			well[row][col] = currentPiece.id;
+			if (newId !== undefined) {
+				well[row][col] = newId;
+			} else {
+				well[row][col] = p.id;
+			}
 		}
 	}
 
