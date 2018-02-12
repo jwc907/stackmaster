@@ -1,10 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
-import App from './App';
 import registerServiceWorker from './registerServiceWorker';
 
-ReactDOM.render(<App />, document.getElementById('root'));
 registerServiceWorker();
 
 
@@ -110,6 +108,10 @@ registerServiceWorker();
 		O: [[0,2], [0,2], [0,2], [0,2]]
 	};
 
+	/*
+		the initial spawn position for each piece.
+		the positions take into account the offsets defined in PieceRotation.
+	*/
 	Constants.PieceSpawnPos = {
 		I: [17,3],
 		T: [18,3],
@@ -120,25 +122,14 @@ registerServiceWorker();
 		O: [18,4]
 	};
 
-	Constants.Inputs = {
-		left: "left",
-		down: "down",
-		right: "right",
-		up: "up",
-		A: "A",
-		B: "B",
-		C: "C"
-	};
-
 	/*
 		when more game modes are added, gravity/delays/DAS won't be constant.
-		so return functions instead of calling functions on the Constants object
+		return functions instead of calling functions on the Constants object
 
-		gravity is defined such that 256 units corresponds to 1 tile.
-		delay values are in frames.
+		gravity is defined such that 256 units equals 1 tile.
 	*/
 	Constants.Gravity = function() {
-		// TODO: rewrite w/ binary search lookup or consider a stateful function
+		// TODO: rewrite w/ binary search lookup or consider stateful function
 		return function(level) {
 			if (level < 30) return 4;
 			if (level < 35) return 6;
@@ -171,10 +162,13 @@ registerServiceWorker();
 			if (level < 450) return 1024;
 			if (level < 500) return 768;
 
-			return 5120;
+			return 5120; // 5120/256 = 20 = height of visible well.
 		}
 	};
 
+	/*
+		delays are defined in frames.
+	*/
 	Constants.EntryDelay = function(n = 30) {
 		return function(level) {
 			return n;
@@ -204,7 +198,7 @@ registerServiceWorker();
 		piece rng rules:
 		select a piece with uniform distribution
 		if piece in history, re-roll up to 4 times
-		1st piece cannot be Z,S,O
+		1st piece (at level 000) cannot be Z,S,O
 
 		initial piece history: (Z,Z,Z,Z)
 
@@ -240,8 +234,6 @@ registerServiceWorker();
 		return generator;
 	}
 
-
-
 	function getRandomPiece(level) {
 		let i;
 
@@ -254,7 +246,9 @@ registerServiceWorker();
 		}
 	}
 
-	// debug generator cycles through each piece in order.
+	/*
+		debug generator cycles through each piece in a fixed order.
+	*/
 	Constants.DebugPieceGenerator = function() {
 		var counter = 0;
 
@@ -267,14 +261,16 @@ registerServiceWorker();
 		return generator;
 	}
 
+
+
 	/*
 		CLASS DECLARATIONS
 	*/
 
 	/*
-		Piece - representation of tetromino.
+		Piece - object representation of tetromino.
 
-		pieceId: id representing one of the 7 possible tetrominos
+		pieceId: string id representing one of the 7 possible tetrominos
 		row, col: coordinates fixed on the piece's "bottom-left" position
 		rotation: the rotation state. possible values: 0 to 3
 	*/
@@ -294,17 +290,27 @@ registerServiceWorker();
 		get rotation() { return this._rotation; }
 	    set rotation(rotation) { this._rotation = rotation; }
 
+	    /*
+			+1 -> clockwise rotation
+			-1 -> counter-clockwise rotation
+	    */
 	    rotate(dir) {
 	    	this._rotation = (this._rotation + dir + 4) % 4;
 	    }
 	}
 
+	/*
+		GameState includes the following:
 
-
+		- menu state when not in-game
+		- game state when in-game
+		- "screen" state for the app's control flow
+	*/
 	class GameState {
 		constructor() {
 			this._level = 0;
-			// well is 21 high and 10 wide
+			// well is 21 high and 10 wide (consider IRS rotation of I piece)
+			// each entry is either NULL or a PieceId (STRING)
 			// need to be careful to DEEP COPY nested arrays!
 			this._well = new Array(21);
 			for (let i = 0; i < this._well.length; i++) {
@@ -320,13 +326,13 @@ registerServiceWorker();
 			this._lineClearDelay = null;
 			this._DASThreshold = null;
 
-			this._currentPiece = null; // Piece OBJECT
-			this._nextPiece = null; // PieceId
-			this._lockedPiece = null;
+			this._currentPiece = null; // Piece - OBJECT
+			this._nextPiece = null; // PieceId - String
+			this._lockedPiece = null; // = current piece when it is locked
 
-			this._onFirstPiece = null;
+			this._onFirstPiece = null; // boolean
 			this._currentGravity = null; // n % 256
-			this._currentLockDelay = null;
+			this._currentLockDelay = null; // ints...
 			this._chargeLeft = 0;
 			this._chargeRight = 0;
 			this._chargeUp = 0;
@@ -334,8 +340,9 @@ registerServiceWorker();
 			this._chargeA = 0;
 			this._chargeB = 0;
 			this._chargeC = 0;
-			this._linesToClear = null;
+			this._linesToClear = null; // array of ints [x,y,z...]
 
+			// control flow variables.
 			this._currentScreen = "start";
 			this._nextScreen = "start";
 			this._screenDuration = null;
@@ -404,6 +411,8 @@ registerServiceWorker();
 
 	    /*
 			update gravity and return the number of rows to fall through.
+
+			return value should be int between 0-20.
 	    */
 	    updateGravity() {
 			this._currentGravity += this._gravity(this._level);
@@ -483,9 +492,9 @@ registerServiceWorker();
 
 		/*
 			updates the current level on piece lock or line clear.
-			if level = x99, need line clear to advance
+			if level = x99 or 998, need line clear to advance
 
-			if the level goes above 999 on line clear, the game is over
+			if the level goes above 998 on line clear, the game is over
 		*/
 		updateLevel(linesCleared) {
 			// don't increment level when the very first piece spawns!
@@ -496,11 +505,12 @@ registerServiceWorker();
 
 				if (linesCleared > 0) {
 					level += linesCleared;
-					if (level > 999) {
+					if (level > 998) {
 						level = 999;
 						this._gameOver = true;
 					}
-				} else if (level % 100 !== 99) {
+				} else if (level !== 998 ||
+						   (level < 900 && level % 100 !== 99)) {
 					level++;
 				}
 
@@ -510,14 +520,12 @@ registerServiceWorker();
 
 	}
 
-
-
 	/*
-		class representing the various overall states the game might be in
+		class representing the various overall states the game might be in.
 		this class is named Screen to distinguish it from -gameplay- modes
 		that will be added in the future
 
-		screen state diagram:
+		screen state / control flow diagram:
 		0 - start -> 1
 		1 - levelSelect -> 2
 		2 - gameStart -> 3
@@ -528,7 +536,6 @@ registerServiceWorker();
 		7 - gameOver -> 0
 	*/
 	class Screen {
-
 		/*
 			duration: amount of frames that should be rendered when
 			the screen state is entered. 0 -> remain in state indefinitely
@@ -559,7 +566,6 @@ registerServiceWorker();
 		get duration() { return this._duration; }
 	    set duration(duration) { this._duration = duration; }
 	}
-
 
 	/*
 		intro splash screen.
@@ -593,10 +599,9 @@ registerServiceWorker();
 		}
 	}
 
-
 	/*
 		level select screen.
-		choose the level the player starts at.
+		the player chooses the level to start at.
 	*/
 	class LevelSelectScreen extends Screen {
 
@@ -608,8 +613,8 @@ registerServiceWorker();
 		process(state, inputs) {
 			let newState = clone(state);
 			processInputs(newState, inputs);
-			let len = this.levelOptions.length;
 
+			let len = this.levelOptions.length;
 			if (newState.chargeDown === 1) {
 				newState.cursorState = (newState.cursorState + 1) % len;
 			}
@@ -627,7 +632,6 @@ registerServiceWorker();
 			return newState;
 		}
 	}
-
 
 	/*
 		game start screen.
@@ -662,7 +666,7 @@ registerServiceWorker();
 
 			// init other game state values
 			newState.onFirstPiece = true;
-			newState.currentGravity = newState.gravity(newState.level);
+			newState.currentGravity = 0;
 			newState.currentLockDelay = 0;
 			newState.chargeLeft = 0;
 			newState.chargeRight = 0;
@@ -690,7 +694,6 @@ registerServiceWorker();
 		}
 	}
 
-
 	/*
 		the frame where a piece spawns in the well.
 
@@ -702,7 +705,6 @@ registerServiceWorker();
 		else
 			spawn piece
 	  	apply gravity
-
 	*/
 	class PieceSpawnScreen extends Screen {
 		constructor() {
@@ -829,7 +831,12 @@ registerServiceWorker();
 		}
 	}
 
+	/*
+		the screen state after each piece lock (and possible line clear).
+		the next piece comes into play after entry delay ends.
+	*/
 	class EntryDelayScreen extends Screen {
+		// flashDuration = number of frames the just locked piece should flash
 		constructor(duration = 30, flashDuration = 3) {
 			super(duration);
 			this._flashDuration = flashDuration;
@@ -863,6 +870,10 @@ registerServiceWorker();
 		}
 	}
 
+	/*
+		the screen state during a line clear.
+		while in this state, cleared lines should flash.
+	*/
 	class LineClearScreen extends Screen {
 		constructor(duration = 41) {
 			super(duration);
@@ -887,6 +898,10 @@ registerServiceWorker();
 		}
 	}
 
+	/*
+		the screen state when the game is over.
+		transitions back to the intro screen after given duration.
+	*/
 	class GameOverScreen extends Screen {
 		constructor(duration = 300) {
 			super(duration);
@@ -910,16 +925,20 @@ registerServiceWorker();
 		}
 	}
 
-
-
-
 	/*
 		AUXILIARY FUNCTIONS
 	*/
 
 	/*
+		clones an object.
+	*/
+	function clone(obj) {
+		return Object.assign(Object.create(Object.getPrototypeOf(obj)), obj)
+	}
+
+	/*
 		track how long directions/buttons are held down
-		for determining DAS/IRS
+		for determining DAS/IRS as well as processing menu navigation
 	*/
 	function processInputs(state, inputs) {
 		if (inputs.left)
@@ -1018,7 +1037,7 @@ registerServiceWorker();
 		determine which way to rotate a live piece, given inputs.
 
 		should only attempt rotation on initial button press.
-		same frame CCW + CW rotation cancel out.
+		same frame CCW + CW rotations cancel out.
 		same frame A + C only rotates once.
 
 		-1 = CCW rotation, 0 = no rotation, 1 = CW rotation
@@ -1041,10 +1060,6 @@ registerServiceWorker();
 			if failure, wallkick right
 			else if failure, wallkick left
 			else no rotation
-
-	 	special cases:
-		    I cannot kick
-		    L,J,T cannot kick on middle column
 
 		   returns a new Piece which is based on the outcome.
 	*/
@@ -1073,7 +1088,9 @@ registerServiceWorker();
 	}
 
 	/*
-		see tryRotation() for wallkick rules.
+		special wallkick rules:
+			I cannot kick
+			L,J,T cannot kick on middle column
 
 		returns a boolean depending on whether the given piece can wallkick.
 	*/
@@ -1131,10 +1148,9 @@ registerServiceWorker();
 	/*
 		determine if the given piece movement is legal.
 
-		returns true if legal movement, false otherwise.
+		returns true if legal move, false otherwise.
 	*/
 	function testMovement(p, well, offsetRow, offsetCol) {
-
 		let newP = clone(p);
 		newP.row += offsetRow;
 		newP.col += offsetCol;
@@ -1147,7 +1163,7 @@ registerServiceWorker();
 
 	/*
 		apply gravity (the number of rows to fall through) on the given piece.
-		consider using a more efficient algorithm!
+		TODO: consider using a more efficient algorithm!
 
 		returns the result as a row offset from the original position.
 		the result will be 0 or NEGATIVE.
@@ -1177,12 +1193,12 @@ registerServiceWorker();
 		return collision(newP, well);
 	}
 
-
-
-
+	/*
+		UI/REACT COMPONENTS + MAIN LOOP
+	*/
 
 	/*
-		Set up input reader.
+		set up input reader.
 
 		Default keybinds (keycodes):
 		up: s (83)
@@ -1231,6 +1247,8 @@ registerServiceWorker();
 	document.addEventListener('keyup', handleKeyup, true);
 
 	/*
+		set up control flow.
+
 		screen state diagram:
 		0 - start -> 1
 		1 - levelSelect -> 2
@@ -1255,9 +1273,9 @@ registerServiceWorker();
 	var gameState = new GameState();
 
 	/*
-
-		UI (React) components
-
+		main loop:
+		for each frame, given a screen state, process inputs and then render.
+		run loop at 60fps.
 	*/
 	class MainLoop extends React.Component {
 
@@ -1296,11 +1314,6 @@ registerServiceWorker();
 			this.levelDisplay = document.getElementById("levelDisplay");
 		}
 
-		/*
-			main loop:
-			for each frame, given a screen state, process inputs and then render.
-			run loop at 60fps.
-		*/
 		processFrame() {
 			let previousScreen = this.gameState.currentScreen;
 			let nextScreen = this.gameState.nextScreen;
@@ -1335,9 +1348,32 @@ registerServiceWorker();
 		 		linesToClear: gameState.linesToClear,
 		 		lockedPiece: gameState.lockedPiece
 			})
-
 		}
 
+		// incredibly naive timestep. TODO: may revisit.
+		// that said, the gameplay requires a strict 60fps!
+		componentDidMount() {
+			this.interval = setInterval(() => this.processFrame(), (1000 / 60));
+		}
+
+		componentWillUnmount() {
+			clearInterval(this.interval);
+		}
+
+		render () {
+			// render the piece preview, if a next piece exists
+			ReactDOM.render(<PiecePreview nextPiece={this.state.nextPiece} />,
+							this.piecePreview);
+
+			// render the level display
+			ReactDOM.render(<LevelDisplay level={this.state.level} />,
+							this.levelDisplay);
+
+			// render the game screen
+			let currentScreen = this.state.currentScreen;
+
+			return this.renderMap[currentScreen]();
+		}
 
 		renderStartScreen() {
 			return <div className='screen text-display'>
@@ -1419,29 +1455,6 @@ registerServiceWorker();
 				GAME OVER
 			</div>
 		}
-
-		componentDidMount() {
-			this.interval = setInterval(() => this.processFrame(), (1000 / 60));
-		}
-
-		componentWillUnmount() {
-			clearInterval(this.interval);
-		}
-
-		render () {
-			// render the piece preview, if a next piece exists
-			ReactDOM.render(<PiecePreview nextPiece={this.state.nextPiece} />,
-							this.piecePreview);
-
-			// render the level display
-			ReactDOM.render(<LevelDisplay level={this.state.level} />,
-							this.levelDisplay);
-
-			// render the game screen
-			let currentScreen = this.state.currentScreen;
-
-			return this.renderMap[currentScreen]();
-		}
 	}
 
 	function PiecePreview(props) {
@@ -1484,24 +1497,6 @@ registerServiceWorker();
 		return (<div className='levelDisplayText'>
 			LEVEL: {currentLevel} / {targetLevel}
 		</div>);
-	}
-
-	function levelToString(level) {
-		if (level < 10) {
-			return "00" + (level).toString();
-		} else if (level < 100) {
-			return "0" + (level).toString();
-		}
-		return (level).toString();
-	}
-
-	function getTargetLevel(level) {
-		let hundredthPlace = Math.floor(level / 100);
-		if (hundredthPlace === 9) {
-			return "999";
-		} else {
-			return ((hundredthPlace + 1) * 100).toString();
-		}
 	}
 
 	function ListItem(props) {
@@ -1556,6 +1551,27 @@ registerServiceWorker();
 		);
 	}
 
+	/*
+		helper functions used by React components.
+	*/
+	function levelToString(level) {
+		if (level < 10) {
+			return "00" + (level).toString();
+		} else if (level < 100) {
+			return "0" + (level).toString();
+		}
+		return (level).toString();
+	}
+
+	function getTargetLevel(level) {
+		let hundredthPlace = Math.floor(level / 100);
+		if (hundredthPlace === 9) {
+			return "999";
+		} else {
+			return ((hundredthPlace + 1) * 100).toString();
+		}
+	}
+
 	function copyWell(well) {
 		let newWell = new Array(well.length);
 		for (let i = 0; i < well.length; i++) {
@@ -1564,8 +1580,22 @@ registerServiceWorker();
 		return newWell;
 	}
 
-	function clone(obj) {
-		return Object.assign(Object.create(Object.getPrototypeOf(obj)), obj)
+	/*
+		Helper function to fill well with the current piece's tiles.
+		Modifies the well in-place.
+	*/
+	function mergePiece(well, p, newId) {
+		let tiles = Constants.PieceRotation[p.id][p.rotation];
+		for (let i = 0; i < tiles.length; i++) {
+			let row = p.row + tiles[i][0];
+			let col = p.col + tiles[i][1];
+
+			if (newId !== undefined) {
+				well[row][col] = newId;
+			} else {
+				well[row][col] = p.id;
+			}
+		}
 	}
 
 	function getTileCss(tile) {
@@ -1590,27 +1620,6 @@ registerServiceWorker();
 				return "tile piece-blank";
 		}
 	}
-
-
-	/*
-		Helper function to fill well with the current piece's tiles.
-		Modifies the well in-place.
-	*/
-	function mergePiece(well, p, newId) {
-		let tiles = Constants.PieceRotation[p.id][p.rotation];
-		for (let i = 0; i < tiles.length; i++) {
-			let row = p.row + tiles[i][0];
-			let col = p.col + tiles[i][1];
-
-			if (newId !== undefined) {
-				well[row][col] = newId;
-			} else {
-				well[row][col] = p.id;
-			}
-		}
-	}
-
-
 
 	// start the main loop.
 	const el = document.getElementById("screen");
