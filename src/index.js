@@ -297,6 +297,21 @@ registerServiceWorker();
 	    rotate(dir) {
 	    	this._rotation = (this._rotation + dir + 4) % 4;
 	    }
+
+	    /*
+			test for equality and return boolean result.
+			id, row, col, and rotation must all be equal
+	    */
+
+	    equals(otherP) {
+			if (otherP == null) return false;
+			if (otherP.id !== this._id) return false;
+			if (otherP.row !== this._row) return false;
+			if (otherP.col !== this._col) return false;
+			if (otherP.rotation !== this._rotation) return false;
+
+			return true;
+	    }
 	}
 
 	/*
@@ -309,7 +324,7 @@ registerServiceWorker();
 	class GameState {
 		constructor() {
 			this._level = 0;
-			// well is 21 high and 10 wide (consider IRS rotation of I piece)
+			// well is 21 high and 10 wide (IRS rotation can occupy 21st row)
 			// each entry is either NULL or a PieceId (STRING)
 			// need to be careful to DEEP COPY nested arrays!
 			this._well = new Array(21);
@@ -328,7 +343,6 @@ registerServiceWorker();
 
 			this._currentPiece = null; // Piece - OBJECT
 			this._nextPiece = null; // PieceId - String
-			this._lockedPiece = null; // = current piece when it is locked
 
 			this._onFirstPiece = null; // boolean
 			this._currentGravity = null; // n % 256
@@ -372,8 +386,6 @@ registerServiceWorker();
 	    set currentPiece(currentPiece) { this._currentPiece = currentPiece; }
 		get nextPiece() { return this._nextPiece; }
 	    set nextPiece(nextPiece) { this._nextPiece = nextPiece; }
-	    get lockedPiece() {return this._lockedPiece; }
-	    set lockedPiece(lockedPiece) { this._lockedPiece = lockedPiece; }
 
 	    get onFirstPiece() { return this._onFirstPiece; }
 	    set onFirstPiece(onFirstPiece) { this._onFirstPiece = onFirstPiece; }
@@ -454,7 +466,6 @@ registerServiceWorker();
 			if (linesToClear.length > 0) {
 	    		this._linesToClear = linesToClear;
 			}
-			this._lockedPiece = p;
 			this._currentGravity = 0; // reset fractional gravity
 	    	this._currentPiece = null;
 	    }
@@ -836,7 +847,7 @@ registerServiceWorker();
 		the next piece comes into play after entry delay ends.
 	*/
 	class EntryDelayScreen extends Screen {
-		// flashDuration = number of frames the just locked piece should flash
+		// flashDuration = number of frames a newly locked piece should flash
 		constructor(duration = 30, flashDuration = 3) {
 			super(duration);
 			this._flashDuration = flashDuration;
@@ -855,12 +866,8 @@ registerServiceWorker();
 
 			newState.screenDuration--;
 
-			let initialDuration = newState.entryDelay(newState.level);
-			if (newState.screenDuration === (initialDuration - this._flashDuration)) {
-				newState.lockedPiece = null;
-			}
 			if (newState.screenDuration === 0) {
-				if (newState.gameOver) { // when lvl 999+ is reached
+				if (newState.gameOver) { // when lvl 999 is reached
 					newState.nextScreen = "gameOver";
 				} else {
 					newState.nextScreen = "pieceSpawn";
@@ -868,6 +875,9 @@ registerServiceWorker();
 			}
 			return newState;
 		}
+
+		get flashDuration() { return this._flashDuration; }
+		set flashDuration(flashDuration) { this._flashDuration = flashDuration; }
 	}
 
 	/*
@@ -882,7 +892,6 @@ registerServiceWorker();
 		enter(state) {
 			let newState = clone(state);
 			newState.screenDuration = newState.lineClearDelay(newState.level);
-			newState.lockedPiece = null;
 			return newState;
 		}
 
@@ -1270,7 +1279,7 @@ registerServiceWorker();
 		gameOver: new GameOverScreen()
 	}
 
-	var gameState = new GameState();
+	var initialGameState = new GameState();
 
 	/*
 		main loop:
@@ -1283,17 +1292,14 @@ registerServiceWorker();
 			super(props);
 
 			this.gameState = this.props.gameState;
+			this.prevState = null;
+			this.lockedPiece = null;
 
 		 	this.state = {
 		 		currentScreen: this.gameState.currentScreen,
-		 		screenDuration: this.gameState.screenDuration,
 		 		cursorState: this.gameState.cursorState,
-		 		well: this.gameState.well,
 		 		level: this.gameState.level,
-		 		currentPiece: this.gameState.currentPiece,
-		 		nextPiece: this.gameState.nextPiece,
-		 		linesToClear: this.gameState.linesToClear,
-		 		lockedPiece: this.gameState.lockedPiece
+				previewWell: null
 		 	}
 
 		 	this.renderMap = {
@@ -1314,40 +1320,146 @@ registerServiceWorker();
 			this.levelDisplay = document.getElementById("levelDisplay");
 		}
 
+		/*
+			the main loop: this gets called once per frame.
+		*/
 		processFrame() {
 			let previousScreen = this.gameState.currentScreen;
 			let nextScreen = this.gameState.nextScreen;
-			let newGameState = clone(this.gameState);
+			let newState = clone(this.gameState);
 
 			if (previousScreen !== nextScreen) {
 				//console.log("transition: " + nextScreen);
-				newGameState = gameScreens[nextScreen].enter(gameState);
-				newGameState.currentScreen = this.gameState.nextScreen;
+				newState = gameScreens[nextScreen].enter(newState);
+				newState.currentScreen = newState.nextScreen;
 			}
 
-			newGameState = gameScreens[nextScreen].process(newGameState, inputs);
+			newState = gameScreens[nextScreen].process(newState, inputs);
 
-			gameState = newGameState;
-			this.updateComponentState(newGameState);
+			this.updateComponentState(newState);
 		}
 
-		updateComponentState(gameState) {
-			this.gameState = gameState;
+		/*
+			updates the internal game state as well as React state.
+		*/
+		updateComponentState(newState) {
+			this.prevState = this.gameState;
+			this.gameState = newState;
 
-			//console.log("current game state:");
-			//console.log(gameState);
+			// only set React state on change!
+			// ...but make sure to batch updates and call setState()
+			// exactly once to prevent issues with asynchronicity!
+			let newProps = {};
 
-			this.setState({
-		 		currentScreen: gameState.currentScreen,
-		 		screenDuration: gameState.screenDuration,
-		 		cursorState: gameState.cursorState,
-		 		well: gameState.well,
-		 		level: gameState.level,
-		 		currentPiece: gameState.currentPiece,
-		 		nextPiece: gameState.nextPiece,
-		 		linesToClear: gameState.linesToClear,
-		 		lockedPiece: gameState.lockedPiece
-			})
+			// currentScreen
+			if (this.prevState.currentScreen !== newState.currentScreen) {
+				newProps.currentScreen = newState.currentScreen;
+			}
+
+			// cursorState
+			if (this.prevState.cursorState !== newState.cursorState) {
+				newProps.cursorState = newState.cursorState;
+			}
+
+			// gameStartMessage
+			if (newState.currentScreen === "gameStart") {
+				let totalDuration = gameScreens[newState.currentScreen].duration;
+				let gameStartMessage = getGameStartMessage(totalDuration,
+														   newState.screenDuration);
+				newProps.gameStartMessage = gameStartMessage;
+			}
+
+			// previewWell
+			if (this.prevState.nextPiece !== newState.nextPiece) {
+				if (newState.nextPiece != null) {
+					// create a 2x10 well
+					let previewWell = new Array(2);
+					for (let i = 0; i < 2; i++) {
+						previewWell[i] = new Array(10);
+						previewWell[i].fill(null);
+					}
+
+					let p = generateNewPiece(newState.nextPiece);
+					// make nextPiece start inside the preview "well"
+					p.row = p.row - 18;
+					mergePiece(previewWell, p);
+
+					// crop the well to only include center 2x4 tiles
+					for (let i = 0; i < 2; i++) {
+						previewWell[i] = previewWell[i].slice(3,7);
+					}
+
+					newProps.previewWell = previewWell;
+				} else {
+					newProps.previewWell = null;
+				}
+			}
+
+			// level
+			if (this.prevState.level !== newState.level) {
+				newProps.level = newState.level;
+			}
+
+			// well:
+			// when a piece is live, the visual state of the well only changes
+			// when the piece moves; therefore, comparing currentPiece between
+			// the previous and current state is sufficient
+			if (newState.currentScreen === "pieceSpawn" ||
+				newState.currentScreen === "pieceLive") {
+				let oldP = this.prevState.currentPiece;
+				let newP = newState.currentPiece;
+
+				if (newP != null && !newP.equals(oldP)) {
+					let newWell = copyWell(newState.well);
+					mergePiece(newWell, newP);
+					newProps.well = newWell;
+				}
+
+				if (newP == null) { // on piece lock...
+					this.lockedPiece = oldP; // piece cannot have moved.
+				}
+			}
+
+			// well:
+			// display lock flash if necessary; update well regardless
+			if (newState.currentScreen === "entryDelay") {
+				// update well when first entering the screen...
+				if (this.prevState.currentScreen !== "entryDelay") {
+					let newWell = copyWell(newState.well);
+					mergePiece(newWell, this.lockedPiece, "CL");
+					newProps.well = newWell;
+				}
+
+				// ...and when lock flash duration ends
+				let totalDuration = gameScreens["entryDelay"].duration;
+				let currentDuration = newState.screenDuration;
+				let flashDuration = gameScreens["entryDelay"].flashDuration;
+
+				if (currentDuration + flashDuration < totalDuration) {
+					this.lockedPiece = null;
+					newProps.well = newState.well;
+				}
+			}
+
+			// well:
+			// make cleared lines flash. only need to do this once per clear
+			if (newState.currentScreen === "lineClear" &&
+				this.prevState.currentScreen !== "lineClear") {
+				let newWell = copyWell(newState.well);
+
+				for (let i = 0; i < newWell.length; i++) {
+					if (newState.linesToClear.includes(i)) {
+						for (let j = 0; j < newWell[i].length; j++) {
+							newWell[i][j] = "CL";
+						}
+					}
+				}
+
+				this.lockedPiece = null;
+				newProps.well = newWell;
+			}
+
+			this.setState(newProps);
 		}
 
 		// incredibly naive timestep. TODO: may revisit.
@@ -1360,9 +1472,9 @@ registerServiceWorker();
 			clearInterval(this.interval);
 		}
 
-		render () {
+		render() {
 			// render the piece preview, if a next piece exists
-			ReactDOM.render(<PiecePreview nextPiece={this.state.nextPiece} />,
+			ReactDOM.render(<PiecePreview previewWell={this.state.previewWell} />,
 							this.piecePreview);
 
 			// render the level display
@@ -1396,58 +1508,25 @@ registerServiceWorker();
 		}
 
 		renderGameStartScreen() {
-			let screenDuration = this.state.screenDuration;
-			let message;
-			if (screenDuration > gameScreens[this.state.currentScreen].duration / 2) {
-				message = "Ready?"
-			}
-			else {
-				message = "GO!"
-			}
-
 			return <div className='screen text-display'>
-				{message}
+				{this.state.gameStartMessage}
 			</div>
 		}
 
 		renderPieceSpawnScreen() {
-			return <WellScreen
-						well={this.state.well}
-						level={this.state.level}
-						currentPiece={this.state.currentPiece}
-						linesToClear={this.state.linesToClear}
-						lockedPiece={this.state.lockedPiece}
-					/>;
+			return <WellScreen well={this.state.well}/>;
 		}
 
 		renderPieceLiveScreen() {
-			return <WellScreen
-						well={this.state.well}
-						level={this.state.level}
-						currentPiece={this.state.currentPiece}
-						linesToClear={this.state.linesToClear}
-						lockedPiece={this.state.lockedPiece}
-					/>;
+			return <WellScreen well={this.state.well}/>;
 		}
 
 		renderEntryDelayScreen() {
-			return <WellScreen
-						well={this.state.well}
-						level={this.state.level}
-						currentPiece={this.state.currentPiece}
-						linesToClear={this.state.linesToClear}
-						lockedPiece={this.state.lockedPiece}
-					/>;
+			return <WellScreen well={this.state.well}/>;
 		}
 
 		renderLineClearScreen() {
-			return <WellScreen
-						well={this.state.well}
-						level={this.state.level}
-						currentPiece={this.state.currentPiece}
-						linesToClear={this.state.linesToClear}
-						lockedPiece={this.state.lockedPiece}
-					/>;
+			return <WellScreen well={this.state.well}/>;
 		}
 
 		renderGameOverScreen() {
@@ -1457,102 +1536,23 @@ registerServiceWorker();
 		}
 	}
 
-	function PiecePreview(props) {
-		let nextPiece = props.nextPiece;
-		if (nextPiece != null) {
+	/*
+		helper functions for determining new React state
+	*/
 
-			// create a 2x10 well
-			let well = new Array(2);
-			for (let i = 0; i < 2; i++) {
-				well[i] = new Array(10);
-				well[i].fill(null);
-			}
-
-			let p = generateNewPiece(nextPiece);
-			// make nextPiece start inside the preview "well"
-			p.row = p.row - 18;
-			mergePiece(well, p);
-
-			// crop the well to center 2x4 tiles
-			for (let i = 0; i < 2; i++) {
-				well[i] = well[i].slice(3,7);
-			}
-
-			let wellRows = [];
-			for (let i = 1; i >= 0; i--) {
-				wellRows.push(<WellRow key={i} row={well[i]} />);
-			}
-
-			return (<div>{wellRows}</div>);
+	/*
+		generates the message to display on the gameStart screen.
+	*/
+	function getGameStartMessage(totalDuration, currentDuration) {
+		if (currentDuration > totalDuration / 2) {
+			return "READY?";
+		} else {
+			return "GO!";
 		}
-
-		return null;
-	}
-
-	function LevelDisplay(props) {
-		let level = props.level;
-		let currentLevel = levelToString(level);
-		let targetLevel = getTargetLevel(level);
-
-		return (<div className='levelDisplayText'>
-			LEVEL: {currentLevel} / {targetLevel}
-		</div>);
-	}
-
-	function ListItem(props) {
-		return (
-			props.selected ? <div><mark>{props.level}</mark></div> :
-							 <div>{props.level}</div>
-		);
-	}
-
-	function WellScreen(props) {
-		let well = copyWell(props.well);
-		let currentPiece = props.currentPiece;
-		let lockedPiece = props.lockedPiece;
-
-		if (currentPiece != null) {
-			mergePiece(well, currentPiece);
-		}
-		if (lockedPiece != null) {
-			mergePiece(well, lockedPiece, "CL");
-		}
-
-		let linesToClear = props.linesToClear === null ? [] : props.linesToClear;
-		let wellRows = [];
-		for (let i = 19; i >= 0; i--) {
-			let cleared = linesToClear.includes(i);
-			wellRows.push(<WellRow key={i} row={well[i]} cleared={cleared} />);
-		}
-
-		return (<div className='screen in-game'>
-			{wellRows}
-		</div>);
-	}
-
-	function WellRow(props) {
-		let row = props.row;
-		let cleared = props.cleared;
-
-		let tiles = row.map((tile, i) => 
-			<WellTile key={i} tile={cleared ? "CL" : tile} />
-		);
-
-		return (
-			<div className="row">{tiles}</div>
-		);
-	}
-
-	function WellTile(props) {
-		let css = getTileCss(props.tile);
-
-		return (
-			<div className={css}></div>
-		);
 	}
 
 	/*
-		helper functions used by React components.
+		formats the given level and returns a string.
 	*/
 	function levelToString(level) {
 		if (level < 10) {
@@ -1563,6 +1563,10 @@ registerServiceWorker();
 		return (level).toString();
 	}
 
+	/*
+		calculates target level (i.e. must clear lines to pass the target),
+		given the current level.
+	*/
 	function getTargetLevel(level) {
 		let hundredthPlace = Math.floor(level / 100);
 		if (hundredthPlace === 9) {
@@ -1572,6 +1576,9 @@ registerServiceWorker();
 		}
 	}
 
+	/*
+		deep copies well.
+	*/
 	function copyWell(well) {
 		let newWell = new Array(well.length);
 		for (let i = 0; i < well.length; i++) {
@@ -1581,10 +1588,13 @@ registerServiceWorker();
 	}
 
 	/*
-		Helper function to fill well with the current piece's tiles.
-		Modifies the well in-place.
+		fills well with the given Piece p's tiles.
+		if newId is specified, newId will be used in place of p.id
+		modifies the well in-place.
 	*/
 	function mergePiece(well, p, newId) {
+		if (p == null) return;
+
 		let tiles = Constants.PieceRotation[p.id][p.rotation];
 		for (let i = 0; i < tiles.length; i++) {
 			let row = p.row + tiles[i][0];
@@ -1598,6 +1608,10 @@ registerServiceWorker();
 		}
 	}
 
+	/*
+		returns CSS classes given a PieceId
+		"CL" is a special case indicating piece lock or line clear flash.
+	*/
 	function getTileCss(tile) {
 		switch (tile) {
 			case "CL":
@@ -1621,8 +1635,101 @@ registerServiceWorker();
 		}
 	}
 
+	/*
+		helper React components
+	*/
+
+	/*
+		props:
+		previewWell - the well representation of the preview piece
+					  should be a 2x4 array of PieceIds.
+	*/
+	function PiecePreview(props) {
+		let previewWell = props.previewWell;
+
+		if (previewWell != null) {
+			let wellRows = [];
+			for (let i = 1; i >= 0; i--) {
+				wellRows.push(<WellRow key={i} row={previewWell[i]} />);
+			}
+
+			return (<div>{wellRows}</div>);
+		}
+
+		return null;
+	}
+
+	/*
+		props:
+		level - the current level.
+	*/
+	function LevelDisplay(props) {
+		let level = props.level;
+		let currentLevel = levelToString(level);
+		let targetLevel = getTargetLevel(level);
+
+		return (<div className='levelDisplayText'>
+			LEVEL: {currentLevel} / {targetLevel}
+		</div>);
+	}
+
+	/*
+		React functional component representing an option on the level select screen.
+
+		props:
+		selected - whether to highlight the given menu option
+		level - string representation of the given level
+	*/
+	function ListItem(props) {
+		return (
+			props.selected ? <div><mark>{props.level}</mark></div> :
+							 <div>{props.level}</div>
+		);
+	}
+
+	/*
+		props:
+		well - array of WellRows
+	*/
+	function WellScreen(props) {
+		let wellRows = [];
+		for (let i = 19; i >= 0; i--) {
+			wellRows.push(<WellRow key={i} row={props.well[i]} />);
+		}
+
+		return (<div className='screen in-game'>
+			{wellRows}
+		</div>);
+	}
+
+	/*
+		props:
+		row - array of WellTiles
+	*/
+	function WellRow(props) {
+		let tiles = props.row.map((tile, i) =>
+			<WellTile key={i} tile={tile} />
+		);
+
+		return (
+			<div className="row">{tiles}</div>
+		);
+	}
+
+	/*
+		props:
+		tile - PieceId or "CL" indicating lock flash or line clear flash
+	*/
+	function WellTile(props) {
+		let css = getTileCss(props.tile);
+
+		return (
+			<div className={css}></div>
+		);
+	}
+
 	// start the main loop.
 	const el = document.getElementById("screen");
-	ReactDOM.render(<MainLoop gameState={gameState} />, el);
+	ReactDOM.render(<MainLoop gameState={initialGameState} />, el);
 
 })();
