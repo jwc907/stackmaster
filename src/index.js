@@ -13,18 +13,10 @@ registerServiceWorker();
 	*/
 	const Constants = {};
 
-	Constants.PieceIds = {
-		I: "I",
-		T: "T",
-		L: "L",
-		J: "J",
-		S: "S",
-		Z: "Z",
-		O: "O"
-	};
-
+	// the complete set of pieces.
 	Constants.PieceArray = ["I","T","L","J","S","Z","O"];
 
+	// the set of pieces that are legal first pieces (i.e. at lvl 000)
 	Constants.PieceInitialArray = ["I","T","L","J"];
 
 	/*
@@ -129,7 +121,7 @@ registerServiceWorker();
 		gravity is defined such that 256 units equals 1 tile.
 	*/
 	Constants.Gravity = function() {
-		// TODO: rewrite w/ binary search lookup or consider stateful function
+		// TODO: rewrite as stateful function
 		return function(level) {
 			if (level < 30) return 4;
 			if (level < 35) return 6;
@@ -302,7 +294,6 @@ registerServiceWorker();
 			test for equality and return boolean result.
 			id, row, col, and rotation must all be equal
 	    */
-
 	    equals(otherP) {
 			if (otherP == null) return false;
 			if (otherP.id !== this._id) return false;
@@ -934,6 +925,8 @@ registerServiceWorker();
 		}
 	}
 
+
+
 	/*
 		AUXILIARY FUNCTIONS
 	*/
@@ -1202,6 +1195,8 @@ registerServiceWorker();
 		return collision(newP, well);
 	}
 
+
+
 	/*
 		UI/REACT COMPONENTS + MAIN LOOP
 	*/
@@ -1278,8 +1273,6 @@ registerServiceWorker();
 		lineClear: new LineClearScreen(),
 		gameOver: new GameOverScreen()
 	}
-
-	var initialGameState = new GameState();
 
 	/*
 		main loop:
@@ -1536,6 +1529,8 @@ registerServiceWorker();
 		}
 	}
 
+
+
 	/*
 		helper functions for determining new React state
 	*/
@@ -1635,6 +1630,8 @@ registerServiceWorker();
 		}
 	}
 
+
+
 	/*
 		helper React components
 	*/
@@ -1728,7 +1725,10 @@ registerServiceWorker();
 		);
 	}
 
+
+
 	// start the main loop.
+	var initialGameState = new GameState();
 	const el = document.getElementById("screen");
 	ReactDOM.render(<MainLoop gameState={initialGameState} />, el);
 
