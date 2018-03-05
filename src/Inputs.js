@@ -189,39 +189,35 @@ var Inputs = (function() {
   }
 
   /*
-    determine which direction a piece should move.
+    determine which horizontal direction a piece should move.
 
-    horizontal input takes precedence over vertical input
     left + right = neutral
 
-    return a tuple of offsets: [offsetRow, offsetCol]
-
-    TODO: Mode 2 introduces sonic drop (with the up key).
-          Need to accommodate this.
-          For keyboard users, need to handle up + down.
-          Another implementation of this game causes
-          simultaneous actions: sonic drop + lock.
+    return a column offset as int.
   */
-  module.processInputMovement =
-  function processInputMovement(leftDAS, rightDAS, down, threshold) {
-    if (leftDAS > 0 || rightDAS > 0) {
-      if (leftDAS > 0 && rightDAS > 0) {
-        return [0,0];
-      }
-
-      if (leftDAS === 1 ||
-          leftDAS >= threshold) {
-        return [0,-1];
-      } else if (rightDAS === 1 ||
-                 rightDAS >= threshold) {
-        return [0,1];
-      }
-    }
-    else if (down > 0) {
-      return [-1,0];
+  module.processHorizontalMovement =
+  function processHorizontalMovement(leftDAS, rightDAS, threshold) {
+    if (leftDAS > 0 && rightDAS > 0) {
+      return 0;
     }
 
-    return [0,0];
+    if (leftDAS === 1 ||
+        leftDAS >= threshold) {
+      return -1;
+    } else if (rightDAS === 1 ||
+               rightDAS >= threshold) {
+      return 1;
+    }
+
+    return 0;
+  }
+
+  /*
+    return true if left or right is being held; false otherwise.
+  */
+  module.hasHorizontalInput =
+  function hasHorizontalInput(inputState) {
+    return (inputState.left > 0 || inputState.right > 0);
   }
 
   return module;

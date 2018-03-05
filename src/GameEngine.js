@@ -168,7 +168,6 @@ var GameEngine = (function() {
         }
 
         this._linesToClear = null;
-        this.updateLevel(shift);
       }
     }
 
@@ -455,32 +454,37 @@ var GameEngine = (function() {
         p = newState.gameMode.RotationSystem(p, newState.well, r);
       }
 
-      // movement
-      let threshold = newState.gameMode.DASThreshold(newState.level);
+      // movement. horizontal > vertical movement in terms of input priority!
+      if (Inputs.hasHorizontalInput(inputs)) {
+        let threshold = newState.gameMode.DASThreshold(newState.level);
+        let offsetCol = Inputs.processHorizontalMovement(newState.leftDAS,
+                                                         newState.rightDAS,
+                                                         threshold);
 
-      let [offsetRow, offsetCol] = Inputs.processInputMovement(newState.leftDAS,
-                                                               newState.rightDAS,
-                                                               inputs.down,
-                                                               threshold);
-      let canMove = testMovement(p, newState.well, offsetRow, offsetCol);
-      if (canMove) {
-        p.row += offsetRow;
-        p.col += offsetCol;
-
-        if (offsetRow !== 0) {
-          movedDown = true;
+        if (offsetCol !== 0) {
+          let canMove = testMovement(p, newState.well, 0, offsetCol);
+          if (canMove) {
+            p.col += offsetCol;
+          }
         }
-      } else if (offsetRow !== 0) { // attempted to move down when unable to do so
-        pieceIsLocked = true;
+      } else { // process sonic drop, then soft drop. both occur on the same frame
+        if (newState.gameMode.CanSonicDrop && inputs.up > 0) {
+          movedDown = moveDown(p, newState.well, 21);
+        }
+        if (inputs.down > 0) {
+          let canMove = testMovement(p, newState.well, -1, 0);
+          if (canMove) {
+            p.row -= 1;
+            movedDown = true;
+          } else {
+            pieceIsLocked = true; // attempted to move down when unable to do so
+          }
+        }
       }
 
       // gravity
       let g = newState.updateGravity();
-      let offsetG = applyGravity(p, newState.well, g);
-      p.row += offsetG;
-      if (offsetG !== 0) {
-        movedDown = true;
-      }
+      movedDown = moveDown(p, newState.well, g);
 
       // lock delay
       if (movedDown) {
@@ -568,6 +572,7 @@ var GameEngine = (function() {
     enter(state) {
       let newState = Util.clone(state);
       newState.screenDuration = newState.gameMode.LineClearDelay(newState.level);
+      newState.updateLevel(newState.linesToClear.length);
       return newState;
     }
 
@@ -628,25 +633,28 @@ var GameEngine = (function() {
 
   /*
     keeps track of left/right DAS charges.
+    remember that left + right cancel out.
 
     TODO: whether or not DAS charges are updated is conditional
     and depends on the screen state! Implement these checks.
   */
   function updateDASCharge(state, inputs) {
     if (inputs.left > 0) {
+      state.rightDAS = 0;
+
       if (inputs.right > 0) {
         state.leftDAS = 0;
-        state.rightDAS = 0;
       } else {
         state.leftDAS++;
       }
-    }
-    else if (inputs.right > 0) {
-      state.rightDAS++;
-    }
-    else {
+    } else {
       state.leftDAS = 0;
-      state.rightDAS = 0;
+
+      if (inputs.right > 0) {
+        state.rightDAS++;
+      } else {
+        state.rightDAS = 0;
+      }
     }
   }
   module.updateDASCharge = updateDASCharge;
@@ -668,6 +676,22 @@ var GameEngine = (function() {
     }
   }
   module.testMovement = testMovement;
+
+  /*
+    attempt to move a piece down by the given number of rows.
+    will continue to move down until unable to do so.
+
+    returns a boolean depending on whether downward movement occurred.
+  */
+  function moveDown(p, well, rows) {
+    let offset = applyGravity(p, well, rows);
+    p.row += offset;
+    if (offset !== 0) {
+      return true;
+    }
+    return false;
+  }
+  module.moveDown = moveDown;
 
   /*
     apply gravity (the number of rows to fall through) on the given piece.

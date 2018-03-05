@@ -28,7 +28,6 @@ var GameModes = (function() {
   var module = {};
 
   module.getMode1 = function() {
-
     var mode = {};
     mode.Gravity = Rules.Gravity.Mode1();
     mode.GravityDivisor = Rules.GravityDivisor.Mode1;
@@ -40,7 +39,28 @@ var GameModes = (function() {
     mode.DASThreshold = Rules.DASThreshold.Mode1();
 
     mode.PieceGenerator = Rules.PieceGenerator.Mode1();
+    mode.CanSonicDrop = Rules.CanSonicDrop.Mode1;
     mode.RotationSystem = Rules.RotationSystem.Mode1;
+
+    return mode;
+  }
+
+
+
+  module.getMode2 = function() {
+    var mode = {};
+    mode.Gravity = Rules.Gravity.Mode2();
+    mode.GravityDivisor = Rules.GravityDivisor.Mode2;
+
+    mode.ARE = Rules.ARE.Mode2();
+    mode.LineClearARE = Rules.LineClearARE.Mode2();
+    mode.LockDelay = Rules.LockDelay.Mode2();
+    mode.LineClearDelay = Rules.LineClearDelay.Mode2();
+    mode.DASThreshold = Rules.DASThreshold.Mode2();
+
+    mode.PieceGenerator = Rules.PieceGenerator.Mode2();
+    mode.CanSonicDrop = Rules.CanSonicDrop.Mode2;
+    mode.RotationSystem = Rules.RotationSystem.Mode2;
 
     return mode;
   }

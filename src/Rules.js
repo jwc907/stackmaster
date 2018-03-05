@@ -242,6 +242,15 @@ var Rules = (function() {
 
 
 
+  // Does the ruleset allow sonic drops?
+  const CanSonicDrop = {};
+  module.CanSonicDrop = CanSonicDrop;
+
+  CanSonicDrop.Mode1 = false;
+  CanSonicDrop.Mode2 = true;
+
+
+
   // What are the rules governing piece rotation and wall/floor kicks?
   const RotationSystem = {};
   module.RotationSystem = RotationSystem;
